@@ -244,18 +244,94 @@ Overall score = weighted sum of 4 sub-scores. The LLM estimates sub-scores; the 
 
 ## n8n Integration
 
-### Workflow (4 nodes)
+### Workflow (5 nodes — fully implemented)
 
 ```
-1. Webhook Trigger          ← receives POST from website contact form
+1. Webhook Trigger           ← POST from website contact form
         │
-2. HTTP Request             ← POST http://your-server:8000/qualify
-        │                      body: { full_name, email, company_name, ... }
+2. HTTP Request → /qualify   ← POST https://<ngrok-or-prod-url>/qualify
+        │                       body: { full_name, email, company_name, ... }
         │
-3. HTTP Request (HubSpot)   ← use {{ $json.hubspot.contact }} and {{ $json.hubspot.deal }}
+3. HTTP Request → Slack      ← POST {{ $json.slack }} to Slack Incoming Webhook
         │
-4. HTTP Request (Slack)     ← use {{ $json.slack }}
+4. HTTP Request → HubSpot Contact  ← POST /crm/v3/objects/contacts
+        │                              body: { "properties": {{ $json.hubspot.contact }} }
+        │
+5. HTTP Request → HubSpot Deal     ← POST /crm/v3/objects/deals
+                                       body: { "properties": {{ $json.hubspot.deal }} }
 ```
+
+**Status: All 5 nodes tested and confirmed working end-to-end.**
+
+### Node-by-node configuration
+
+#### Node 1 — Webhook Trigger
+- **Authentication:** None
+- **HTTP Method:** POST
+- **Response Mode:** When Last Node Finishes
+
+#### Node 2 — HTTP Request `/qualify`
+- **Method:** POST
+- **URL:** `https://<your-ngrok-url>/qualify`
+- **Body Content Type:** JSON
+- **Body:**
+```json
+{
+  "full_name": "{{ $json.body.full_name }}",
+  "email": "{{ $json.body.email }}",
+  "company_name": "{{ $json.body.company_name }}",
+  "industry": "{{ $json.body.industry }}",
+  "budget_range": "{{ $json.body.budget_range }}",
+  "timeline": "{{ $json.body.timeline }}",
+  "needs": "{{ $json.body.needs }}",
+  "phone": "{{ $json.body.phone }}"
+}
+```
+
+#### Node 3 — Slack Notification
+- **Method:** POST
+- **URL:** Your Slack Incoming Webhook URL
+- **Body Content Type:** JSON
+- **Body:** `{{ JSON.stringify($json.slack) }}`
+
+#### Node 4 — HubSpot Contact
+- **Method:** POST
+- **URL:** `https://api.hubapi.com/crm/v3/objects/contacts`
+- **Headers:** `Authorization: Bearer pat-eu1-YOUR_TOKEN`
+- **Body Content Type:** JSON
+- **Body:**
+```json
+{
+  "properties": {{ JSON.stringify($json.hubspot.contact) }}
+}
+```
+
+#### Node 5 — HubSpot Deal
+- **Method:** POST
+- **URL:** `https://api.hubapi.com/crm/v3/objects/deals`
+- **Headers:** `Authorization: Bearer pat-eu1-YOUR_TOKEN`
+- **Body Content Type:** JSON
+- **Body:**
+```json
+{
+  "properties": {{ JSON.stringify($json.hubspot.deal) }}
+}
+```
+
+### HubSpot Setup
+
+**Create a Service Key (HubSpot's current auth method):**
+1. Go to `app-eu1.hubspot.com` → Settings → Integrations → Private Apps
+2. If redirected to "Legacy Apps", choose **Create Service Key**
+3. Required scopes: `crm.objects.contacts.write`, `crm.objects.deals.write`, `crm.objects.contacts.read`, `crm.objects.deals.read`
+4. Copy the generated token (`pat-eu1-...`) into your n8n HubSpot nodes as `Bearer <token>`
+
+**HubSpot Pipeline Stage IDs (Kairos Sales Pipeline):**
+
+| Stage | HubSpot ID |
+|---|---|
+| Lead | `5198127291` |
+| Outreach Sent | `5198127292` |
 
 ### Exposing the API to n8n
 
@@ -263,7 +339,13 @@ Overall score = weighted sum of 4 sub-scores. The LLM estimates sub-scores; the 
 ```bash
 python3 -m uvicorn api:app --port 8000
 ngrok http 8000
-# Use the https://xxxx.ngrok.io URL in your n8n HTTP Request node
+# Copy the https://xxxx.ngrok-free.app URL into Node 2 in n8n
+```
+
+**If port 8000 is already in use:**
+```bash
+kill $(lsof -ti:8000)
+python3 -m uvicorn api:app --port 8000
 ```
 
 **Production — deploy to Railway or Render:**
@@ -304,9 +386,18 @@ Claude returned non-JSON output. Rare with the current prompt. Check the raw err
 
 **Port 8000 already in use**
 ```bash
-kill $(lsof -ti:8000)
-python3 -m uvicorn api:app --port 8000
+kill $(lsof -ti:8000) && python3 -m uvicorn api:app --port 8000
 ```
+
+**HubSpot 401 Unauthorized**
+Ensure the Authorization header in n8n HubSpot nodes is `Bearer pat-eu1-YOUR_TOKEN` (not just the token alone). HubSpot EU instance base URL: `https://api.hubapi.com` (same for EU and US portals).
+
+**HubSpot contact created with no data**
+The v3 API requires a `properties` wrapper. The request body must be:
+```json
+{ "properties": { "email": "...", "firstname": "...", ... } }
+```
+Not a flat object.
 
 ---
 
@@ -324,9 +415,11 @@ Per-lead cost: ~€0.03 (≈1,300 tokens input + 400 tokens output at Sonnet pri
 
 ## Next Steps
 
-- [ ] Deploy API to Railway / Render for permanent URL
-- [ ] Build n8n workflow (webhook → /qualify → HubSpot → Slack)
-- [ ] Create HubSpot custom properties (`kairos_qualification_score`, etc.)
+- [x] Build n8n workflow (webhook → /qualify → Slack → HubSpot contact → HubSpot deal)
+- [x] Connect HubSpot Service Key authentication
+- [x] Validate end-to-end: contact and deal created in HubSpot with correct stage
+- [ ] Deploy API to Railway / Render for permanent URL (removes ngrok dependency)
+- [ ] Create HubSpot custom properties (`kairos_qualification_score`, `kairos_budget_fit_score`, etc.)
 - [ ] Connect live website form to n8n webhook
 - [ ] Monitor first 20 real leads, validate scores vs manual judgment
 - [ ] Phase 2: outbound prospecting with LangGraph + Tavily
