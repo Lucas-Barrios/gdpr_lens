@@ -1,0 +1,12 @@
+# Python dependencies for Kairos Lead Generation System
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+anthropic>=0.7.0          # Claude API client
+python-dotenv>=1.0.0      # Environment variable management
+requests>=2.31.0          # HTTP requests for webhooks
+
+# Optional for full implementation
+psycopg2-binary>=2.9.0    # PostgreSQL adapter for Supabase (optional)
+langchain>=0.1.0          # LangChain framework (optional)
+langchain-anthropic>=0.1.0  # LangChain Anthropic integration (optional)
