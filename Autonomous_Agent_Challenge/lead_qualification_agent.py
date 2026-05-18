@@ -8,14 +8,13 @@ It analyzes form submissions and generates qualification scores + routing recomm
 
 import os
 import json
+import requests
 from typing import Dict, Any
-from anthropic import Anthropic
 from dotenv import load_dotenv
 
 load_dotenv()  # loads ANTHROPIC_API_KEY from .env if present
 
-# Initialize Anthropic client
-client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 QUALIFICATION_SYSTEM_PROMPT = """You are a lead qualification expert for Kairos Consulting, an AI consulting firm based in Berlin.
 
@@ -123,22 +122,29 @@ def calculate_qualification_score(lead_data: Dict[str, Any]) -> Dict[str, Any]:
         needs=lead_data.get("needs", "")
     )
     
-    # Call Claude API
+    # Call Claude API directly via requests (more reliable in serverless environments)
     try:
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1000,
-            temperature=0.3,
-            system=QUALIFICATION_SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": user_prompt}
-            ]
+        resp = requests.post(
+            ANTHROPIC_API_URL,
+            headers={
+                "x-api-key": os.getenv("ANTHROPIC_API_KEY"),
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 1000,
+                "system": QUALIFICATION_SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": user_prompt}]
+            },
+            timeout=50
         )
-        
+        resp.raise_for_status()
+        data = resp.json()
+
         # Extract response text
-        response_text = message.content[0].text
-        
-        # Parse JSON response
+        response_text = data["content"][0]["text"]
+
         # Remove markdown code blocks if present
         response_text = response_text.strip()
         if response_text.startswith("```json"):
@@ -148,7 +154,7 @@ def calculate_qualification_score(lead_data: Dict[str, Any]) -> Dict[str, Any]:
         if response_text.endswith("```"):
             response_text = response_text[:-3]
         response_text = response_text.strip()
-        
+
         qualification_result = json.loads(response_text)
 
         # Recalculate overall_score from sub-scores using the defined weights.
@@ -173,13 +179,13 @@ def calculate_qualification_score(lead_data: Dict[str, Any]) -> Dict[str, Any]:
 
         # Add API usage metadata
         qualification_result["api_usage"] = {
-            "input_tokens": message.usage.input_tokens,
-            "output_tokens": message.usage.output_tokens,
-            "model": message.model
+            "input_tokens": data["usage"]["input_tokens"],
+            "output_tokens": data["usage"]["output_tokens"],
+            "model": data["model"]
         }
 
         return qualification_result
-        
+
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}")
     except Exception as e:
