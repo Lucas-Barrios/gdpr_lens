@@ -1,5 +1,5 @@
-# Kairos Lead Generation System - Prototype
-## Phase 1: Inbound Lead Qualification
+# Kairos Lead Qualification System
+## Phase 1: Inbound Lead Qualification — Complete
 
 **Created:** May 18, 2026  
 **For:** Ironhack Lab - Autonomous Agent Challenge  
@@ -9,14 +9,16 @@
 
 ## Overview
 
-An AI-powered lead qualification system that automatically scores and routes inbound leads from the Kairos website contact form. Built with Claude Sonnet 4.6 and exposed as an HTTP API so n8n can orchestrate the full workflow.
+An AI-powered lead qualification system that automatically scores and routes inbound leads from the Kairos website contact form. Built with Claude Sonnet 4.6, deployed as a serverless API on Vercel, and orchestrated with n8n.
 
-**What it does:**
-1. Receives a lead (via API or n8n webhook) with company, industry, budget, timeline, and needs
-2. Calls Claude Sonnet 4.6 to score the lead across 4 dimensions (industry fit, budget, timeline, needs clarity)
-3. Recalculates the overall score deterministically using defined weights (40/25/20/15)
-4. Routes to the appropriate HubSpot pipeline stage (70+ = high priority, 40-69 = medium, <40 = low)
-5. Returns a ready-to-use HubSpot contact/deal payload and a Slack block-kit notification
+**What it does — end to end:**
+1. Visitor fills out the contact form on `kairosconsulting.co`
+2. The Next.js server action fires a webhook to n8n
+3. n8n calls `api.kairosconsulting.co/qualify` → Claude Sonnet 4.6 scores the lead across 4 dimensions
+4. Score is recalculated deterministically in Python (weights: 40/25/20/15)
+5. HubSpot contact is created or updated (PATCH by email) with all AI scores
+6. HubSpot deal is created in the correct pipeline stage (`Outreach Sent` ≥ 70, `Lead` otherwise)
+7. Slack block-kit notification sent to the team
 
 **Test results:** 6/6 test cases passing (100%) across all target industries.
 
@@ -25,20 +27,21 @@ An AI-powered lead qualification system that automatically scores and routes inb
 ## Architecture
 
 ```
-Website Form
-     │
-     ▼
-n8n Webhook Trigger
-     │
-     ▼
-POST /qualify  ◄─── FastAPI (api.py)
-     │                    │
-     │              Claude Sonnet 4.6
-     │              (lead_qualification_agent.py)
-     │
-     ├──► HubSpot API  (create contact + deal)
-     ├──► Slack Webhook (block-kit notification)
-     └──► Supabase     (lead history log)
+kairosconsulting.co (Next.js)
+  Contact Form → contact.ts (server action)
+        │
+        │ fire-and-forget POST
+        ▼
+n8n Webhook  (lucas-b.n8n.irn.hk/webhook/lead-intake)
+        │
+        ▼
+POST api.kairosconsulting.co/qualify   ← FastAPI on Vercel
+        │         Claude Sonnet 4.6
+        │         (direct Anthropic API via requests)
+        │
+        ├──► Slack Incoming Webhook   (block-kit alert)
+        ├──► HubSpot PATCH /contacts  (upsert by email + AI scores)
+        └──► HubSpot POST  /deals     (pipeline stage + use case)
 ```
 
 ---
@@ -47,15 +50,17 @@ POST /qualify  ◄─── FastAPI (api.py)
 
 ```
 Autonomous_Agent_Challenge/
-├── .env                          # API keys — DO NOT COMMIT (gitignored)
-├── .env.example                  # Safe template — copy to .env and fill in
-├── .gitignore                    # Ignores .env, __pycache__
-├── api.py                        # FastAPI wrapper — exposes /qualify and /health
-├── lead_qualification_agent.py   # Core agent: scoring logic + HubSpot/Slack formatting
-├── quick_test.py                 # Single-lead smoke test (run before full suite)
-├── test_qualification.py         # Full 6-case test suite
-├── test_results.json             # Latest test run results
-└── requirements.txt              # Python dependencies
+├── .env                              # API keys — DO NOT COMMIT (gitignored)
+├── .env.example                      # Safe template — copy to .env and fill in
+├── .gitignore                        # Ignores .env, __pycache__, .vercel
+├── vercel.json                       # Vercel deployment config (Python, 60s timeout)
+├── api.py                            # FastAPI wrapper — exposes /qualify and /health
+├── lead_qualification_agent.py       # Core agent: scoring logic + HubSpot/Slack formatting
+├── create_hubspot_properties.py      # One-time script: creates 14 HubSpot custom properties
+├── quick_test.py                     # Single-lead smoke test (run before full suite)
+├── test_qualification.py             # Full 6-case test suite
+├── test_results.json                 # Latest test run results
+└── requirements.txt                  # Python dependencies
 ```
 
 ---
@@ -65,12 +70,12 @@ Autonomous_Agent_Challenge/
 **Required:**
 - Python 3.9+
 - Anthropic API key ([console.anthropic.com](https://console.anthropic.com))
+- Vercel account (free) — for deployment
 
 **For full n8n integration:**
 - n8n instance (cloud or self-hosted)
-- HubSpot account with API access
-- Slack webhook URL
-- Supabase project (optional — for lead history logging)
+- HubSpot account with two Service Keys (see HubSpot Setup below)
+- Slack Incoming Webhook URL
 
 ---
 
@@ -88,7 +93,7 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Open .env and replace the placeholder with your real key:
+# Open .env and add your key:
 # ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
 ```
 
@@ -115,13 +120,31 @@ Failed: 0 ❌
 Success Rate: 100.0%
 ```
 
-### 5. Start the API server
+### 5. Start the API server (local dev)
 
 ```bash
 python3 -m uvicorn api:app --port 8000
 ```
 
-Then open **http://127.0.0.1:8000/docs** in your browser — interactive Swagger UI to test the endpoint live.
+Swagger UI: **http://127.0.0.1:8000/docs**
+
+---
+
+## Deployment (Vercel)
+
+The API is deployed to Vercel and served at **`https://api.kairosconsulting.co`**.
+
+```bash
+# First deploy
+vercel link --scope <your-scope> --yes --project kairos-lead-api
+vercel env add ANTHROPIC_API_KEY production   # paste key when prompted
+vercel --prod
+
+# Subsequent deploys (after code changes)
+vercel --prod
+```
+
+The `vercel.json` sets a 60-second function timeout to accommodate Claude API response times.
 
 ---
 
@@ -129,16 +152,12 @@ Then open **http://127.0.0.1:8000/docs** in your browser — interactive Swagger
 
 ### `GET /health`
 
-Liveness check for n8n or monitoring tools.
-
 ```bash
-curl http://localhost:8000/health
+curl https://api.kairosconsulting.co/health
 # → {"status": "ok"}
 ```
 
 ### `POST /qualify`
-
-Qualify a lead and receive scores, HubSpot payload, and Slack notification payload.
 
 **Request body:**
 
@@ -175,7 +194,7 @@ Qualify a lead and receive scores, HubSpot payload, and Slack notification paylo
   },
   "hubspot": {
     "contact": { "email": "...", "kairos_qualification_score": "92", "..." },
-    "deal":    { "dealstage": "outreachsent", "pipeline": "kairos_sales_pipeline", "..." }
+    "deal": { "dealstage": "5198127292", "pipeline": "kairos_sales_pipeline", "..." }
   },
   "slack": {
     "text": "New qualified lead: Dr. Thomas Weber (Score: 92/100)",
@@ -188,7 +207,7 @@ Qualify a lead and receive scores, HubSpot payload, and Slack notification paylo
 
 ## Scoring Logic
 
-Overall score = weighted sum of 4 sub-scores. The LLM estimates sub-scores; the final rollup is calculated in Python to keep it deterministic.
+Overall score = weighted sum of 4 sub-scores. Claude estimates sub-scores; the final rollup is recalculated in Python to keep it deterministic.
 
 ### Industry Fit — 40%
 
@@ -236,43 +255,38 @@ Overall score = weighted sum of 4 sub-scores. The LLM estimates sub-scores; the 
 
 | Score | HubSpot Stage | Action |
 |---|---|---|
-| 70–100 | `Outreach Sent` | Personalized outreach within 24h |
-| 40–69 | `Lead` | Nurture sequence |
-| 0–39 | `Lead` + tag `Low Fit - Nurture` | Educational content, re-qualify in 6 months |
+| 70–100 | `Outreach Sent` (ID: 5198127292) | Personalized outreach within 24h |
+| 40–69 | `Lead` (ID: 5198127291) | Nurture sequence |
+| 0–39 | `Lead (Low Fit)` | Educational content, re-qualify in 6 months |
 
 ---
 
 ## n8n Integration
 
-### Workflow (5 nodes — fully implemented)
+### Workflow (5 nodes — published and live)
 
 ```
-1. Webhook Trigger           ← POST from website contact form
+1. Webhook Trigger           ← POST from kairosconsulting.co contact form
         │
-2. HTTP Request → /qualify   ← POST https://<ngrok-or-prod-url>/qualify
-        │                       body: { full_name, email, company_name, ... }
+2. HTTP Request → /qualify   ← POST https://api.kairosconsulting.co/qualify
         │
-3. HTTP Request → Slack      ← POST {{ $json.slack }} to Slack Incoming Webhook
+3. HTTP Request → Slack      ← POST Slack Incoming Webhook
         │
-4. HTTP Request → HubSpot Contact  ← POST /crm/v3/objects/contacts
-        │                              body: { "properties": {{ $json.hubspot.contact }} }
+4. HTTP Request → HubSpot Contact  ← PATCH /crm/v3/objects/contacts/{email}?idProperty=email
         │
 5. HTTP Request → HubSpot Deal     ← POST /crm/v3/objects/deals
-                                       body: { "properties": {{ $json.hubspot.deal }} }
 ```
-
-**Status: All 5 nodes tested and confirmed working end-to-end.**
 
 ### Node-by-node configuration
 
 #### Node 1 — Webhook Trigger
-- **Authentication:** None
+- **Path:** `lead-intake`
 - **HTTP Method:** POST
 - **Response Mode:** When Last Node Finishes
 
 #### Node 2 — HTTP Request `/qualify`
 - **Method:** POST
-- **URL:** `https://<your-ngrok-url>/qualify`
+- **URL:** `https://api.kairosconsulting.co/qualify`
 - **Body Content Type:** JSON
 - **Body:**
 ```json
@@ -290,41 +304,53 @@ Overall score = weighted sum of 4 sub-scores. The LLM estimates sub-scores; the 
 
 #### Node 3 — Slack Notification
 - **Method:** POST
-- **URL:** Your Slack Incoming Webhook URL
-- **Body Content Type:** JSON
-- **Body:** `{{ JSON.stringify($json.slack) }}`
+- **URL:** Slack Incoming Webhook URL
+- **Body:** `{{ JSON.stringify($('HTTP Request').item.json.slack) }}`
 
-#### Node 4 — HubSpot Contact
-- **Method:** POST
-- **URL:** `https://api.hubapi.com/crm/v3/objects/contacts`
+#### Node 4 — HubSpot Contact (upsert)
+- **Method:** PATCH
+- **URL:** `https://api.hubapi.com/crm/v3/objects/contacts/{{ $('HTTP Request').item.json.hubspot.contact.email }}?idProperty=email`
 - **Headers:** `Authorization: Bearer pat-eu1-YOUR_TOKEN`
-- **Body Content Type:** JSON
 - **Body:**
 ```json
 {
-  "properties": {{ JSON.stringify($json.hubspot.contact) }}
+  "properties": {{ JSON.stringify($('HTTP Request').item.json.hubspot.contact) }}
 }
 ```
+- **Settings:** Enable "Continue on Error" to handle first-time creation gracefully
 
 #### Node 5 — HubSpot Deal
 - **Method:** POST
 - **URL:** `https://api.hubapi.com/crm/v3/objects/deals`
 - **Headers:** `Authorization: Bearer pat-eu1-YOUR_TOKEN`
-- **Body Content Type:** JSON
 - **Body:**
 ```json
 {
-  "properties": {{ JSON.stringify($json.hubspot.deal) }}
+  "properties": {{ JSON.stringify($('HTTP Request').item.json.hubspot.deal) }}
 }
 ```
 
 ### HubSpot Setup
 
-**Create a Service Key (HubSpot's current auth method):**
-1. Go to `app-eu1.hubspot.com` → Settings → Integrations → Private Apps
-2. If redirected to "Legacy Apps", choose **Create Service Key**
-3. Required scopes: `crm.objects.contacts.write`, `crm.objects.deals.write`, `crm.objects.contacts.read`, `crm.objects.deals.read`
-4. Copy the generated token (`pat-eu1-...`) into your n8n HubSpot nodes as `Bearer <token>`
+**Two Service Keys required:**
+
+| Key Name | Scopes | Used for |
+|---|---|---|
+| `kairos-n8n` | `crm.objects.contacts.read/write`, `crm.objects.deals.read/write` | n8n contact + deal creation |
+| `kairos-schema-admin` | above + `crm.schemas.contacts.write`, `crm.schemas.deals.write` | Creating custom properties (one-time) |
+
+**Create Service Keys:**
+1. `app-eu1.hubspot.com` → Settings → Integrations → Private Apps → Create Service Key
+2. Use `kairos-n8n` token in n8n nodes
+3. Use `kairos-schema-admin` token only when running `create_hubspot_properties.py`
+
+**Create custom properties (one-time):**
+```bash
+export HUBSPOT_TOKEN=pat-eu1-your-schema-admin-token
+python3 create_hubspot_properties.py
+```
+
+This creates 14 properties (9 on contacts, 5 on deals) in the "Kairos AI Scoring" group.
 
 **HubSpot Pipeline Stage IDs (Kairos Sales Pipeline):**
 
@@ -333,26 +359,27 @@ Overall score = weighted sum of 4 sub-scores. The LLM estimates sub-scores; the 
 | Lead | `5198127291` |
 | Outreach Sent | `5198127292` |
 
-### Exposing the API to n8n
+---
 
-**Local testing — use ngrok:**
-```bash
-python3 -m uvicorn api:app --port 8000
-ngrok http 8000
-# Copy the https://xxxx.ngrok-free.app URL into Node 2 in n8n
-```
+## Website Form Integration
 
-**If port 8000 is already in use:**
-```bash
-kill $(lsof -ti:8000)
-python3 -m uvicorn api:app --port 8000
-```
+The contact form on `kairosconsulting.co` is a custom Next.js form (`src/actions/contact.ts`). On submission it:
+1. Validates fields with Zod
+2. Stores the lead in Supabase
+3. Fires a non-blocking POST to the n8n webhook with mapped field values
+4. Sends notification email to admin (Resend)
+5. Sends confirmation email to the lead
 
-**Production — deploy to Railway or Render:**
-```bash
-# Railway (one command after linking repo):
-railway up
-```
+**Field mapping** (form values → n8n/qualify API):
+
+| Form value | Mapped to |
+|---|---|
+| `wellness` | `Wellness & Fitness Studios` |
+| `aesthetic_clinic` | `Aesthetic Clinics` |
+| `5k_15k` | `€5K-€10K` |
+| `15k_plus` | `€10K-€25K` |
+| `immediate` | `Immediately` |
+| `1_3_months` | `1-3 months` |
 
 ---
 
@@ -378,50 +405,63 @@ Full results: `Autonomous_Agent_Challenge/test_results.json`
 cat .env   # confirm key is present and starts with sk-ant-
 ```
 
-**`model not found` (404)**
-The agent uses `claude-sonnet-4-6`. If you see a 404, your API key may not have access to this model — check [console.anthropic.com](https://console.anthropic.com).
+**Vercel function times out**
+The `vercel.json` sets `maxDuration: 60` via the builds config. If you see timeout errors, confirm the config was deployed correctly.
 
 **`JSON decode error`**
-Claude returned non-JSON output. Rare with the current prompt. Check the raw error message for the actual response text.
+Claude returned non-JSON output. Rare. Check the raw error message for the actual response text.
 
-**Port 8000 already in use**
+**Port 8000 already in use (local dev)**
 ```bash
 kill $(lsof -ti:8000) && python3 -m uvicorn api:app --port 8000
 ```
 
 **HubSpot 401 Unauthorized**
-Ensure the Authorization header in n8n HubSpot nodes is `Bearer pat-eu1-YOUR_TOKEN` (not just the token alone). HubSpot EU instance base URL: `https://api.hubapi.com` (same for EU and US portals).
+Ensure the Authorization header is `Bearer pat-eu1-YOUR_TOKEN`. HubSpot EU base URL: `https://api.hubapi.com`.
 
 **HubSpot contact created with no data**
-The v3 API requires a `properties` wrapper. The request body must be:
+The v3 API requires a `properties` wrapper:
 ```json
 { "properties": { "email": "...", "firstname": "...", ... } }
 ```
-Not a flat object.
+
+**HubSpot contact 409 Conflict (duplicate)**
+Node 4 uses PATCH with `?idProperty=email` to upsert. Also enable "Continue on Error" on the node as a fallback.
+
+**n8n webhook 404 (not registered)**
+The workflow must be **Published** (not just saved). Click the Publish button in the top-right of the n8n editor.
 
 ---
 
 ## Cost Estimates
 
-| Volume | Anthropic API | n8n Cloud | Total/month |
-|---|---|---|---|
-| 50 leads/month | ~€1.50 | €20 (starter) | ~€22 |
-| 100 leads/month | ~€3 | €20 (starter) | ~€23 |
-| 500 leads/month | ~€15 | €50 (pro) | ~€65 |
+| Volume | Anthropic API | Vercel | n8n | Total/month |
+|---|---|---|---|---|
+| 50 leads/month | ~€1.50 | Free | Self-hosted | ~€1.50 |
+| 100 leads/month | ~€3 | Free | Self-hosted | ~€3 |
+| 500 leads/month | ~€15 | Free | Self-hosted | ~€15 |
 
-Per-lead cost: ~€0.03 (≈1,300 tokens input + 400 tokens output at Sonnet pricing).
+Per-lead cost: ~€0.03 (≈1,300 tokens input + 400 tokens output at Sonnet pricing).  
+Vercel hosting: free (Hobby plan, serverless functions).
 
 ---
 
-## Next Steps
+## Phase 1 — Completed Milestones
 
-- [x] Build n8n workflow (webhook → /qualify → Slack → HubSpot contact → HubSpot deal)
-- [x] Connect HubSpot Service Key authentication
-- [x] Validate end-to-end: contact and deal created in HubSpot with correct stage
-- [ ] Deploy API to Railway / Render for permanent URL (removes ngrok dependency)
-- [ ] Create HubSpot custom properties (`kairos_qualification_score`, `kairos_budget_fit_score`, etc.)
-- [ ] Connect live website form to n8n webhook
+- [x] Core Claude Sonnet 4.6 scoring agent with deterministic score recalculation
+- [x] FastAPI wrapper with `/qualify` and `/health` endpoints
+- [x] 6/6 test cases passing across all target industries
+- [x] Deployed to Vercel at `api.kairosconsulting.co` (free, permanent URL)
+- [x] n8n 5-node workflow built and published
+- [x] Slack block-kit notifications
+- [x] HubSpot contact upsert + deal creation with correct pipeline stage
+- [x] 14 HubSpot custom properties created (Kairos AI Scoring group)
+- [x] Live website form connected to n8n webhook
+
+## Phase 2 — Next Steps
+
 - [ ] Monitor first 20 real leads, validate scores vs manual judgment
+- [ ] Associate HubSpot deals with contacts via Associations API
 - [ ] Phase 2: outbound prospecting with LangGraph + Tavily
 
 ---
@@ -440,4 +480,4 @@ Per-lead cost: ~€0.03 (≈1,300 tokens input + 400 tokens output at Sonnet pri
 
 **Created by:** Lucas Barrios  
 **Date:** May 18, 2026  
-**Version:** 2.0
+**Version:** 3.0

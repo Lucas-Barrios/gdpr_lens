@@ -1,14 +1,8 @@
-# Python dependencies for Kairos Lead Generation System
+# Python dependencies for Kairos Lead Qualification System
 # Install with: pip install -r requirements.txt
 
-# Core dependencies
-requests>=2.31.0          # HTTP client (direct Anthropic API calls + webhooks)
-python-dotenv>=1.0.0      # Environment variable management
-fastapi>=0.100.0          # API framework for n8n integration
-uvicorn>=0.23.0           # ASGI server
-pydantic>=2.0.0           # Request validation
-
-# Optional for full implementation
-psycopg2-binary>=2.9.0    # PostgreSQL adapter for Supabase (optional)
-langchain>=0.1.0          # LangChain framework (optional)
-langchain-anthropic>=0.1.0  # LangChain Anthropic integration (optional)
+requests>=2.31.0          # HTTP client — direct Anthropic API calls + HubSpot/Slack webhooks
+python-dotenv>=1.0.0      # Loads ANTHROPIC_API_KEY from .env for local development
+fastapi>=0.100.0          # API framework — exposes /qualify and /health endpoints
+uvicorn>=0.23.0           # ASGI server — local development only (production runs on Vercel)
+pydantic>=2.0.0           # Request/response validation for FastAPI
