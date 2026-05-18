@@ -197,9 +197,9 @@ def map_stage_to_hubspot_stage(recommended_stage: str) -> str:
         HubSpot stage identifier
     """
     stage_mapping = {
-        "Outreach Sent": "outreachsent",
-        "Lead": "lead",
-        "Lead (Low Fit)": "lead"  # Same stage, different tag
+        "Outreach Sent": "5198127292",
+        "Lead": "5198127291",
+        "Lead (Low Fit)": "5198127291"
     }
     return stage_mapping.get(recommended_stage, "lead")
 
