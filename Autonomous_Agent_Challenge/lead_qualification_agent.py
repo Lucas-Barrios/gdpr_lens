@@ -10,6 +10,9 @@ import os
 import json
 from typing import Dict, Any
 from anthropic import Anthropic
+from dotenv import load_dotenv
+
+load_dotenv()  # loads ANTHROPIC_API_KEY from .env if present
 
 # Initialize Anthropic client
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -123,7 +126,7 @@ def calculate_qualification_score(lead_data: Dict[str, Any]) -> Dict[str, Any]:
     # Call Claude API
     try:
         message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-6",
             max_tokens=1000,
             temperature=0.3,
             system=QUALIFICATION_SYSTEM_PROMPT,
@@ -147,14 +150,34 @@ def calculate_qualification_score(lead_data: Dict[str, Any]) -> Dict[str, Any]:
         response_text = response_text.strip()
         
         qualification_result = json.loads(response_text)
-        
+
+        # Recalculate overall_score from sub-scores using the defined weights.
+        # The LLM estimates sub-scores well but its rollup arithmetic drifts;
+        # doing it here keeps the number deterministic and consistent.
+        s = qualification_result["scores"]
+        qualification_result["overall_score"] = round(
+            s["industry_fit"]     * 0.40 +
+            s["budget_alignment"] * 0.25 +
+            s["timeline_urgency"] * 0.20 +
+            s["needs_clarity"]    * 0.15
+        )
+
+        # Re-derive routing stage from the recalculated score.
+        score = qualification_result["overall_score"]
+        if score >= 70:
+            qualification_result["recommended_stage"] = "Outreach Sent"
+        elif score >= 40:
+            qualification_result["recommended_stage"] = "Lead"
+        else:
+            qualification_result["recommended_stage"] = "Lead (Low Fit)"
+
         # Add API usage metadata
         qualification_result["api_usage"] = {
             "input_tokens": message.usage.input_tokens,
             "output_tokens": message.usage.output_tokens,
             "model": message.model
         }
-        
+
         return qualification_result
         
     except json.JSONDecodeError as e:

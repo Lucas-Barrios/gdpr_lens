@@ -21,7 +21,7 @@ TEST_LEADS = [
             "timeline": "Immediately",
             "needs": "We have 5 fitness studios in Berlin and spend too much time manually responding to customer inquiries about class schedules, memberships, and trainer availability. Need AI chatbot to automate routine questions and free up staff."
         },
-        "expected_score_range": (85, 100),
+        "expected_score_range": (88, 100),
         "expected_stage": "Outreach Sent"
     },
     {
@@ -51,7 +51,7 @@ TEST_LEADS = [
             "timeline": "1-3 months",
             "needs": "Private practice with 3 doctors. Overwhelmed with appointment requests via phone and email. Want AI-powered booking system and patient communication automation to reduce front desk workload."
         },
-        "expected_score_range": (85, 98),
+        "expected_score_range": (82, 93),
         "expected_stage": "Outreach Sent"
     },
     {
@@ -66,7 +66,7 @@ TEST_LEADS = [
             "timeline": "1-3 months",
             "needs": "High-end salon with 12 stylists. Need smart booking system with automated reminders and loyalty program. Currently using basic calendar, lots of no-shows and manual follow-up."
         },
-        "expected_score_range": (65, 80),
+        "expected_score_range": (72, 84),
         "expected_stage": "Lead"
     },
     {
@@ -81,8 +81,8 @@ TEST_LEADS = [
             "timeline": "3-6 months",
             "needs": "Residential real estate agency with 8 agents. Interested in AI for lead qualification and property matching. Currently researching options."
         },
-        "expected_score_range": (60, 75),
-        "expected_stage": "Lead"
+        "expected_score_range": (73, 82),
+        "expected_stage": "Outreach Sent"
     },
     {
         "name": "Low Priority - Retail Store",
@@ -96,8 +96,8 @@ TEST_LEADS = [
             "timeline": "6+ months",
             "needs": "Fashion boutique. Just learning about AI and what it can do for retail. No specific use case yet."
         },
-        "expected_score_range": (35, 55),
-        "expected_stage": "Lead"
+        "expected_score_range": (40, 58),
+        "expected_stage": "Lead (Low Fit)"
     }
 ]
 
