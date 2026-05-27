@@ -1,4 +1,4 @@
-# GDPR Audit — Kairos B2B Sales Intelligence Research System
+# GDPR Audit — B2B Sales Intelligence Research System
 
 This audit covers the current development phase of the Kairos B2B sales intelligence research system: a Python-based workflow that researches target companies, enriches them with Hunter.io contact data, analyzes company and outreach context through OpenAI and Anthropic, stores CRM/report records in Supabase, generates local HTML/Markdown/PDF reports, and supports outbound email tracking through Resend. The review focuses on the system as implemented in source code and documented architecture before full production deployment with real contact data. Bottom line: **PROCEED WITH CONDITIONS**. The system should not process real contact data or send outreach until the hard blockers below are resolved.
 
