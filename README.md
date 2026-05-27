@@ -6,13 +6,13 @@ This audit covers the current development phase of the Kairos B2B sales intellig
 
 | File | Purpose |
 |---|---|
-| `00_data-processing-brief.md` | Plain-language system overview for a DPO, covering personal data categories, sources, purposes, processors, storage, decision-making, and the opt-out gap. |
-| `01_personal-data-inventory.md` | Inventory table mapping data categories to sources, purposes, retention posture, and EU-US transfer exposure. |
-| `02_role-map.md` | Controller/processor role map, DPA status, Hunter.io dual-role analysis, and international transfer requirements. |
-| `03_lawful-basis.md` | Purpose-by-purpose lawful-basis assessment, cold outreach LIA, reply profiling analysis, and ePrivacy note. |
-| `04_risk-rights-analysis.md` | Special category risk, Article 22 profiling risk, DPIA trigger analysis, and data subject rights friction. |
-| `05_law-stacking.md` | AI Act, ePrivacy/German TDDDG, supply-chain, LinkedIn scraping, and broader law-stack analysis. |
-| `06_compliance-memo.md` | Client-facing legal counsel memo with bottom line, required actions, residual risks, and disclaimer. |
+| `gdpr-audit/00_data-processing-brief.md` | Plain-language system overview for a DPO, covering personal data categories, sources, purposes, processors, storage, decision-making, and the opt-out gap. |
+| `gdpr-audit/01_personal-data-inventory.md` | Inventory table mapping data categories to sources, purposes, retention posture, and EU-US transfer exposure. |
+| `gdpr-audit/02_role-map.md` | Controller/processor role map, DPA status, Hunter.io dual-role analysis, and international transfer requirements. |
+| `gdpr-audit/03_lawful-basis.md` | Purpose-by-purpose lawful-basis assessment, cold outreach LIA, reply profiling analysis, and ePrivacy note. |
+| `gdpr-audit/04_risk-rights-analysis.md` | Special category risk, Article 22 profiling risk, DPIA trigger analysis, and data subject rights friction. |
+| `gdpr-audit/05_law-stacking.md` | AI Act, ePrivacy/German TDDDG, supply-chain, LinkedIn scraping, and broader law-stack analysis. |
+| `gdpr-audit/06_compliance-memo.md` | Client-facing legal counsel memo with bottom line, required actions, residual risks, and disclaimer. |
 
 ## Critical Open Items
 
